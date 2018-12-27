@@ -12,11 +12,8 @@
   <div class="hero-body">
     <div class="container">
       <h1 class="title">
-        VueRoulette
+        LT ルーレット
       </h1>
-      <h2 class="subtitle">
-        A simple roulette using VueJS
-      </h2>
     </div>
   </div>
 </section>
@@ -26,7 +23,7 @@
     <div class="columns">
       <div class="column">
         <div class="columns is-centered">
-          <input type="button" class="button is-dark" value="SPIN ROULETTE" id='spin' v-on:click="spin"/>  
+          <input type="button" class="button is-dark" value="SPIN ROULETTE" id='spin' v-on:click="spin"/>
         </div>
         <div class="columns is-centered">
           <canvas id="canvas" width="500" height="500"></canvas>
@@ -74,7 +71,7 @@ var app = new Vue({
   computed:{
     arc: function () {
       return Math.PI / (this.options.length / 2);
-    } 
+    }
   },
 
   methods: {
@@ -92,11 +89,11 @@ var app = new Vue({
       var center = 128;
       var width = 127;
       var frequency = Math.PI*2/maxitem;
-      
+
       red   = Math.sin(frequency*item+2+phase) * width + center;
       green = Math.sin(frequency*item+0+phase) * width + center;
       blue  = Math.sin(frequency*item+4+phase) * width + center;
-      
+
       return this.RGB2Color(red,green,blue);
     },
 
@@ -143,13 +140,13 @@ var app = new Vue({
           this.ctx.shadowBlur    = 0;
           this.ctx.shadowColor   = "rgb(220,220,220)";
           this.ctx.fillStyle = "black";
-          this.ctx.translate(250 + Math.cos(angle + this.arc / 2) * textRadius, 
+          this.ctx.translate(250 + Math.cos(angle + this.arc / 2) * textRadius,
                         250 + Math.sin(angle + this.arc / 2) * textRadius);
           this.ctx.rotate(angle + this.arc / 2 + Math.PI / 2);
           var text = this.options[i];
           this.ctx.fillText(text, -this.ctx.measureText(text).width / 2, 0);
           this.ctx.restore();
-        } 
+        }
 
         //Arrow
         this.ctx.fillStyle = "black";
