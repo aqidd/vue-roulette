@@ -8,7 +8,7 @@ Enhanced and converted to VueJS app.
 ### How to use :
 
 1. Add prizes
-2. Click `Spint Roulette`
+2. Click `Spin Roulette`
 3. ~~Profit~~
 
 Curious? [See it in action](http://aqidd.github.io/vue-roulette/)
