@@ -1,0 +1,353 @@
+<!-- 
+2025-04-04: Created modern version of Vue Roulette using Vue 3 and Tailwind CSS
+- Replaced Vue 2 with Vue 3 Composition API
+- Replaced Bulma CSS with Tailwind CSS
+- Maintained original functionality with improved UI
+- Modernized JavaScript using arrow functions and const/let
+- Added Inter font for better typography
+- Added selected prize display in the middle of the wheel
+- Improved spin animation with smoother easing
+- Integrated with Express backend and Gemini API for AI-powered prize suggestions
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vue Roulette</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="/api-client.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <header class="bg-gray-800 text-white py-6">
+    <div class="container mx-auto px-4">
+      <h1 class="text-3xl font-bold">VueRoulette</h1>
+      <p class="text-gray-300">A simple roulette using Vue 3</p>
+    </div>
+  </header>
+
+  <main class="container mx-auto px-4 py-8">
+    <div id="app">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="flex flex-col items-center">
+          <button 
+            @click="spin"
+            class="mb-4 px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition"
+          >
+            SPIN ROULETTE
+          </button>
+          <div class="relative">
+            <canvas id="canvas" width="500" height="500" class="border-4 border-gray-800 rounded-full transition-all duration-300"></canvas>
+            <div v-if="selectedOption" class="absolute inset-0 flex items-center justify-center">
+              <div class="bg-white bg-opacity-80 rounded-full p-4 shadow-lg transform transition-all duration-500 animate-pulse">
+                <p class="text-xl font-bold text-center">{{ selectedOption }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div>
+          <div class="flex mb-4">
+            <input 
+              type="text" 
+              v-model="newOption" 
+              placeholder="Input More Prize" 
+              @keyup.enter="addOption"
+              class="flex-grow px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+            <button 
+              @click="addOption"
+              class="px-4 py-2 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700 transition"
+            >
+              Add Prize
+            </button>
+          </div>
+          
+          <div class="mb-4">
+            <div class="flex">
+              <input 
+                type="text" 
+                v-model="themeInput" 
+                placeholder="Enter theme for prize suggestions" 
+                class="flex-grow px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+              <button 
+                @click="generatePrizes"
+                :disabled="isGenerating"
+                class="px-4 py-2 bg-purple-600 text-white rounded-r-lg hover:bg-purple-700 transition disabled:bg-purple-300"
+              >
+                {{ isGenerating ? 'Generating...' : 'Get AI Suggestions' }}
+              </button>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Powered by Gemini AI</p>
+          </div>
+          
+          <div v-if="suggestedPrizes.length > 0" class="mb-4 p-3 bg-purple-50 rounded-lg">
+            <h3 class="font-bold text-purple-800 mb-2">AI Suggested Prizes:</h3>
+            <div class="flex flex-wrap gap-2">
+              <button 
+                v-for="(prize, idx) in suggestedPrizes" 
+                :key="'sugg-'+idx"
+                @click="addSuggestedPrize(prize)"
+                class="px-3 py-1 bg-purple-200 text-purple-800 rounded hover:bg-purple-300 transition flex items-center"
+              >
+                <span>{{ prize }}</span>
+                <span class="ml-1 text-xs">+</span>
+              </button>
+            </div>
+          </div>
+          
+          <div class="flex flex-wrap gap-2">
+            <div 
+              v-for="(option, index) in options" 
+              :key="index"
+              class="flex items-center bg-white p-2 rounded-lg shadow"
+            >
+              <button 
+                @click="removeOption(index)"
+                class="w-6 h-6 flex items-center justify-center bg-red-500 text-white rounded-full mr-2 hover:bg-red-600 transition"
+              >
+                x
+              </button>
+              <span>{{ option }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+
+    createApp({
+      setup() {
+        const options = ref(['Try Again']);
+        const newOption = ref('');
+        const startAngle = ref(0);
+        const spinTimeout = ref(null);
+        const spinTime = ref(0);
+        const spinTimeTotal = ref(0);
+        const spinAngleStart = ref(0);
+        const ctx = ref(null);
+        const selectedOption = ref('');
+        const isSpinning = ref(false);
+        const apiClient = new ApiClient();
+        const apiStatus = ref(null);
+        const themeInput = ref('');
+        const suggestedPrizes = ref([]);
+        const isGenerating = ref(false);
+
+        const byte2Hex = (n) => {
+          const nybHexString = "0123456789ABCDEF";
+          return String(nybHexString.substr((n >> 4) & 0x0F, 1)) + nybHexString.substr(n & 0x0F, 1);
+        };
+
+        const RGB2Color = (r, g, b) => {
+          return '#' + byte2Hex(r) + byte2Hex(g) + byte2Hex(b);
+        };
+
+        const getColor = (item, maxitem) => {
+          const phase = 0;
+          const center = 128;
+          const width = 127;
+          const frequency = Math.PI * 2 / maxitem;
+          
+          const red = Math.sin(frequency * item + 2 + phase) * width + center;
+          const green = Math.sin(frequency * item + 0 + phase) * width + center;
+          const blue = Math.sin(frequency * item + 4 + phase) * width + center;
+          
+          return RGB2Color(red, green, blue);
+        };
+
+        const addOption = () => {
+          if (newOption.value.trim()) {
+            options.value.push(newOption.value);
+            newOption.value = '';
+            drawRouletteWheel();
+          }
+        };
+
+        const removeOption = (index) => {
+          options.value.splice(index, 1);
+          drawRouletteWheel();
+        };
+
+        const drawRouletteWheel = () => {
+          const canvas = document.getElementById("canvas");
+          if (canvas.getContext) {
+            const outsideRadius = 200;
+            const textRadius = 160;
+            const insideRadius = 125;
+
+            ctx.value = canvas.getContext("2d");
+            ctx.value.clearRect(0, 0, 500, 500);
+
+            ctx.value.strokeStyle = "black";
+            ctx.value.lineWidth = 2;
+            ctx.value.font = 'bold 14px Inter, sans-serif';
+
+            const arc = Math.PI / (options.value.length / 2);
+
+            for (let i = 0; i < options.value.length; i++) {
+              const angle = startAngle.value + i * arc;
+              ctx.value.fillStyle = getColor(i, options.value.length);
+
+              ctx.value.beginPath();
+              ctx.value.arc(250, 250, outsideRadius, angle, angle + arc, false);
+              ctx.value.arc(250, 250, insideRadius, angle + arc, angle, true);
+              ctx.value.stroke();
+              ctx.value.fill();
+
+              ctx.value.save();
+              ctx.value.shadowOffsetX = -1;
+              ctx.value.shadowOffsetY = -1;
+              ctx.value.shadowBlur = 0;
+              ctx.value.shadowColor = "rgb(220,220,220)";
+              ctx.value.fillStyle = "black";
+              ctx.value.translate(250 + Math.cos(angle + arc / 2) * textRadius, 
+                            250 + Math.sin(angle + arc / 2) * textRadius);
+              ctx.value.rotate(angle + arc / 2 + Math.PI / 2);
+              const text = options.value[i];
+              ctx.value.fillText(text, -ctx.value.measureText(text).width / 2, 0);
+              ctx.value.restore();
+            } 
+
+            // Arrow
+            ctx.value.fillStyle = "black";
+            ctx.value.beginPath();
+            ctx.value.moveTo(250 - 4, 250 - (outsideRadius + 5));
+            ctx.value.lineTo(250 + 4, 250 - (outsideRadius + 5));
+            ctx.value.lineTo(250 + 4, 250 - (outsideRadius - 5));
+            ctx.value.lineTo(250 + 9, 250 - (outsideRadius - 5));
+            ctx.value.lineTo(250 + 0, 250 - (outsideRadius - 13));
+            ctx.value.lineTo(250 - 9, 250 - (outsideRadius - 5));
+            ctx.value.lineTo(250 - 4, 250 - (outsideRadius - 5));
+            ctx.value.lineTo(250 - 4, 250 - (outsideRadius + 5));
+            ctx.value.fill();
+          }
+        };
+
+        const spin = () => {
+          if (isSpinning.value) return;
+          
+          isSpinning.value = true;
+          selectedOption.value = '';
+          spinAngleStart.value = Math.random() * 10 + 10;
+          spinTime.value = 0;
+          spinTimeTotal.value = Math.random() * 3 + 5 * 1000; // Longer spin time
+          rotateWheel();
+        };
+
+        const rotateWheel = () => {
+          spinTime.value += 16; // Smoother animation with higher frame rate
+          if (spinTime.value >= spinTimeTotal.value) {
+            stopRotateWheel();
+            return;
+          }
+          const spinAngle = spinAngleStart.value - improvedEaseOut(spinTime.value, 0, spinAngleStart.value, spinTimeTotal.value);
+          startAngle.value += (spinAngle * Math.PI / 180);
+          drawRouletteWheel();
+
+          spinTimeout.value = setTimeout(rotateWheel, 16); // 60fps for smoother animation
+        };
+
+        const stopRotateWheel = () => {
+          clearTimeout(spinTimeout.value);
+          const degrees = startAngle.value * 180 / Math.PI + 90;
+          const arcd = 360 / options.value.length;
+          const index = Math.floor((360 - degrees % 360) / arcd);
+          console.log("Winner: " + options.value[index]);
+          
+          // Show selected option in the middle
+          selectedOption.value = options.value[index];
+          isSpinning.value = false;
+        };
+
+        const easeOut = (t, b, c, d) => {
+          const ts = (t /= d) * t;
+          const tc = ts * t;
+          return b + c * (tc * ts + -6 * ts * ts + 15 * tc + -20 * ts + 10 * t);
+        };
+        
+        // Improved easing function for smoother animation
+        const improvedEaseOut = (t, b, c, d) => {
+          if ((t /= d) < 1/2.75) {
+            return c * (7.5625 * t * t) + b;
+          } else if (t < 2/2.75) {
+            return c * (7.5625 * (t -= 1.5/2.75) * t + 0.75) + b;
+          } else if (t < 2.5/2.75) {
+            return c * (7.5625 * (t -= 2.25/2.75) * t + 0.9375) + b;
+          } else {
+            return c * (7.5625 * (t -= 2.625/2.75) * t + 0.984375) + b;
+          }
+        };
+
+        const generatePrizes = async () => {
+          if (!themeInput.value || isGenerating.value) return;
+          
+          try {
+            isGenerating.value = true;
+            const response = await apiClient.suggestPrizes(themeInput.value, 5);
+            suggestedPrizes.value = response.prizes;
+          } catch (error) {
+            console.error('Failed to generate prizes:', error);
+          } finally {
+            isGenerating.value = false;
+          }
+        };
+        
+        const addSuggestedPrize = (prize) => {
+          options.value.push(prize);
+          drawRouletteWheel();
+        };
+        
+        const checkApiStatus = async () => {
+          try {
+            apiStatus.value = await apiClient.checkHealth();
+          } catch (error) {
+            apiStatus.value = false;
+            console.error('API status check failed:', error);
+          }
+        };
+        
+        onMounted(() => {
+          drawRouletteWheel();
+          checkApiStatus();
+        });
+
+        return {
+          options,
+          newOption,
+          addOption,
+          removeOption,
+          spin,
+          selectedOption,
+          isSpinning,
+          apiStatus,
+          themeInput,
+          generatePrizes,
+          suggestedPrizes,
+          isGenerating,
+          addSuggestedPrize
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
